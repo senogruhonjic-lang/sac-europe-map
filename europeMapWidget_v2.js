@@ -96,15 +96,27 @@
       };
     }
 
-    // --- SAC-kompatible Methods ---
-
     getSelectedCountry() {
       return this._selectedCountry;
     }
 
-    loadMap(svgString) {
-      this._svgHost.innerHTML = svgString;
-      this._bindEvents();
+    loadMap(svgStringOrUrl) {
+      var self = this;
+      var trimmed = svgStringOrUrl.trim();
+      if (trimmed.indexOf("<svg") === 0 || trimmed.indexOf("<?xml") === 0) {
+        self._svgHost.innerHTML = trimmed;
+        self._bindEvents();
+      } else {
+        fetch(trimmed)
+          .then(function(response) { return response.text(); })
+          .then(function(svgText) {
+            self._svgHost.innerHTML = svgText;
+            self._bindEvents();
+          })
+          .catch(function(err) {
+            self._svgHost.innerHTML = '<p style="color:red;padding:20px;">Fehler beim Laden: ' + err.message + '</p>';
+          });
+      }
     }
 
     setActiveCountries(countryCodes) {
@@ -113,89 +125,41 @@
       this._applyHighlights();
     }
 
-    // --- Properties (SAC setzt diese) ---
-
-    set svgContent(value) {
-      if (value) {
-        this._svgHost.innerHTML = value;
-        this._bindEvents();
-      }
-    }
-    get svgContent() {
-      return this._svgHost.innerHTML;
-    }
-
-    set clickableCountries(value) {
-      if (value) {
-        this._clickableList = value.split(",").map(function(s) { return s.trim(); });
-      }
-    }
-    get clickableCountries() {
-      return this._clickableList.join(",");
-    }
-
-    set highlightCountries(value) {
-      if (value) {
-        this._highlightList = value.split(",").map(function(s) { return s.trim(); });
-        this._applyHighlights();
-      }
-    }
-    get highlightCountries() {
-      return this._highlightList.join(",");
-    }
-
-    set selectedCountry(value) {
-      this._selectedCountry = value || "";
-    }
-    get selectedCountry() {
-      return this._selectedCountry;
-    }
-
-    // --- Interne Logik ---
+    set svgContent(value) { if (value) { this.loadMap(value); } }
+    get svgContent() { return this._svgHost.innerHTML; }
+    set clickableCountries(value) { if (value) { this._clickableList = value.split(",").map(function(s) { return s.trim(); }); } }
+    get clickableCountries() { return this._clickableList.join(","); }
+    set highlightCountries(value) { if (value) { this._highlightList = value.split(",").map(function(s) { return s.trim(); }); this._applyHighlights(); } }
+    get highlightCountries() { return this._highlightList.join(","); }
+    set selectedCountry(value) { this._selectedCountry = value || ""; }
+    get selectedCountry() { return this._selectedCountry; }
 
     _applyHighlights() {
-      var paths = this._svgHost.querySelectorAll("path");
       var self = this;
-      paths.forEach(function(path) {
+      this._svgHost.querySelectorAll("path").forEach(function(path) {
         var id = path.getAttribute("data-id") || path.getAttribute("id") || "";
-        if (self._highlightList.indexOf(id) >= 0) {
-          path.classList.add("active");
-        } else {
-          path.classList.remove("active");
-        }
+        path.classList.toggle("active", self._highlightList.indexOf(id) >= 0);
       });
     }
 
     _bindEvents() {
-      var paths = this._svgHost.querySelectorAll("path");
       var self = this;
-
-      paths.forEach(function(path) {
+      this._svgHost.querySelectorAll("path").forEach(function(path) {
         var id = path.getAttribute("data-id") || path.getAttribute("id") || "";
         var name = path.getAttribute("data-name") || self._countryNames[id] || id;
+        if (self._highlightList.indexOf(id) >= 0) path.classList.add("active");
 
-        if (self._highlightList.indexOf(id) >= 0) {
-          path.classList.add("active");
-        }
-
-        path.addEventListener("mouseenter", function(e) {
-          var isClickable = self._clickableList.indexOf(id) >= 0;
+        path.addEventListener("mouseenter", function() {
           self._tooltipTitle.textContent = self._countryNames[id] || name;
-          self._tooltipHint.textContent = isClickable
-            ? "Klicken fuer Berichte" : "Noch nicht verfuegbar";
+          self._tooltipHint.textContent = self._clickableList.indexOf(id) >= 0 ? "Klicken fuer Berichte" : "Noch nicht verfuegbar";
           self._tooltip.classList.add("visible");
         });
-
         path.addEventListener("mousemove", function(e) {
           var rect = self._svgHost.getBoundingClientRect();
           self._tooltip.style.left = (e.clientX - rect.left + 12) + "px";
           self._tooltip.style.top = (e.clientY - rect.top - 10) + "px";
         });
-
-        path.addEventListener("mouseleave", function() {
-          self._tooltip.classList.remove("visible");
-        });
-
+        path.addEventListener("mouseleave", function() { self._tooltip.classList.remove("visible"); });
         path.addEventListener("click", function() {
           if (self._clickableList.indexOf(id) >= 0) {
             self._selectedCountry = id;
